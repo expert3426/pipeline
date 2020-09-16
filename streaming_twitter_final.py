@@ -296,7 +296,7 @@ class Model():
     grid = GridSearchCV(pipeline
                         , param_grid
                         , cv=5
-                        , verbose=1)
+                        , verbose=10)
 
     for param in grid.get_params().keys():
         print(param)
@@ -340,7 +340,7 @@ if __name__ == '__main__':
 #
 # grid.fit(text_train, y_train)
 
-print("best cross-validation score: {:.2f}".format(grid.best_score_))
+#print("best cross-validation score: {:.2f}".format(grid.best_score_))
 # print(grid.bset_estimator_)
 #
 # end_time = datetime.now()
