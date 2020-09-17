@@ -35,25 +35,86 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import f1_score
 from sklearn.metrics import fbeta_score, make_scorer
 ftwo_scorer = make_scorer(fbeta_score, beta=2)
 
+from sklearn.metrics import precision_recall_curve
+
+
 # 알파벳이 아닌 문자
 non_alphabet = re.compile('[^a-z]+')
+
+emo_info = {
+    # positive emoticons
+    ":‑)": " good ",
+    ":)": " good ",
+    ";)": " good ",
+    ":-}": " good ",
+    "=]": " good ",
+    "=)": " good ",
+    ":d": " good ",
+    ":dd": " good ",
+    "xd": " good ",
+    "<3": " love ",
+
+    ":p": "playful",
+    "xp": "playful",
+
+    # negativve emoticons
+    ":‑(": " sad ",
+    ":‑[": " sad ",
+    ":(": " sad ",
+    "=(": " sad ",
+    "=/": " sad ",
+    ":{": " sad ",
+    ":/": " sad ",
+    ":|": " sad ",
+    ":-/": " sad ",
+    ":o": " shock "
+
+}
+# 순서 지정 ":dd"가 ":d"보다 먼저 변환되기 때문.
+emo_info_order = [k for (k_len, k) in reversed(sorted([(len(k), k) for k in emo_info.keys()]))]
+
+def emo_repl(phrase):
+
+    for k in emo_info_order:
+        phrase = phrase.replace(k, emo_info[k])
+    return phrase
+
+def decontracted(phrase):
+    # specific
+    phrase = re.sub(r"won\'t", "will not", phrase)
+    phrase = re.sub(r"can\'t", "can not", phrase)
+    phrase = re.sub(r"\bdon't\b", "do not", phrase)
+    phrase = re.sub(r"\bdoesn't\b", "does not", phrase)
+    phrase = re.sub(r"\bdidn't\b", "did not", phrase)
+    phrase = re.sub(r"\bhasn't\b", "has not", phrase)
+    phrase = re.sub(r"\bhaven't\b", "have not", phrase)
+    phrase = re.sub(r"\bhadn't\b", "had not", phrase)
+    phrase = re.sub(r"\bwon't\b", "will not", phrase)
+    phrase = re.sub(r"\bwouldn't\b", "would not", phrase)
+
+    # general
+    phrase = re.sub(r"n\'t", " not", phrase)
+    phrase = re.sub(r"\'re", " are", phrase)
+    phrase = re.sub(r"\'s", " is", phrase)  #소유격일 경우 처리 불가능..
+
+    #using regular expressions to expand the contractions
+    phrase = re.sub(r"\'d", " would", phrase)
+    phrase = re.sub(r"\'ll", " will", phrase)
+    # phrase = re.sub(r"\'t", " not", phrase)
+    phrase = re.sub(r"\'ve", " have", phrase)
+    phrase = re.sub(r"\'m", " am", phrase)
+
+    return phrase
 
 def pre_processing(datframe):
     """데이터 전처리 작업"""
     df = datframe
     # #대문자 소문자로 변환
     df["tweet"] = df["tweet"].map(lambda x: x.lower())
-    print(df.head())
-
-    # 해쉬태그 또느 멘션 제거
-    df["tweet"] = df["tweet"].str.replace(r'[\@\#]\S+', '')
-    print(df.head())
-
-    #HTML 제거
-    df["tweet"] = df["tweet"].str.replace(r'<\w+[^>]+>', '')
     print(df.head())
 
     #email 제거
@@ -65,8 +126,24 @@ def pre_processing(datframe):
     df["tweet"] = df["tweet"].str.replace(r'(http|ftp|https)://[-\w.]+(:\d+)?(/([\w/_.]*)?)?|www[\.]\S+', '')
     print(df.head())
 
+    # 해쉬태그 또느 멘션 제거
+    df["tweet"] = df["tweet"].str.replace(r'[\@\#]\S+', '')
+    print(df.head())
+
+    #HTML 제거
+    df["tweet"] = df["tweet"].str.replace(r'<\w+[^>]+>', '')
+    print(df.head())
+
     # 마침표 제거
     df["tweet"] = df["tweet"].str.replace(r'[\.]', '')
+
+    #이모티콘 문자 변환
+    df['tweet'] = df['tweet'].apply(emo_repl)
+    print(df.head())
+
+    #발음 수축된 단어 두 단어로 다시 표기
+    df['tweet'] = df['tweet'].apply(decontracted)
+    print(df.head())
 
     # 불용어 제거 작업
     # 트위터 글 공백 구분자로 자른 후 불용어는 제거 후 리스트
@@ -77,7 +154,7 @@ def pre_processing(datframe):
                       "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", \
                       "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", \
                       "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", \
-                      "most", "other", "some", "such",  "nor", "only", "own", "same", "so", "than", "too", "very", "s", "t", "just", "don", "now", 'twet']
+                      "most", "other", "some", "such",  "nor", "only", "own", "same", "so", "than", "too", "very", "s", "t", "just", "don", "now", 'tweet']
 
     stop.extend(manual_sw_list)
 
@@ -100,7 +177,7 @@ def pre_processing(datframe):
     print(df.head())
 
     # 두 글자 이상 중복된 경우 알파벳 모두 두 글자로 만드는 작업
-    df['tweet'] = df['tweet'].str.replace(r'([a-z])\1{1,}', r'\1')
+    df['tweet'] = df['tweet'].str.replace(r'([a-z])\1{1,}', r'\1\1')
 
     print(df.head())
     # 인코딩으로 인한 깨진 문자 제거
@@ -108,7 +185,7 @@ def pre_processing(datframe):
         lambda x: ' '.join([word for word in x.split() if non_alphabet.search(word) is None]))
     print(df.head())
 
-    #haha 여러번 중복 되는 것 하나로 변경
+    #haha 여러번 중복 되는 것 두글자로 변경
     df['tweet'] = df['tweet'].str.replace(r'(ha)\1{1,}', r'\1')
     print(df.head())
 
@@ -162,6 +239,14 @@ sent_word_net = load_sent_word_net()
 
 #사전 예시
 # print(sent_word_net['v/fantasize'])
+
+def plot_precision_recall_vs_threshold(precisions, recalls, thresholds):
+    plt.plot(thresholds, precisions[:-1], "b--", label="Precision")
+    plt.plot(thresholds, recalls[:-1], "g-", label="Recall")
+    plt.xlabel("Threshold")
+    plt.legend(loc="center left")
+    plt.ylim([0, 1])
+
 
 class LinguisticVectorizer(BaseEstimator):
     """POS 품사를 고려한 긍정 부정 단어 점수 사전 """
@@ -277,8 +362,7 @@ class Model():
     
     df.drop("word_count", axis=1, inplace=True)
     
-    """
-    df["word_count"] = df['tweet'].apply(lambda x: len(str(x).split()))
+        df["word_count"] = df['tweet'].apply(lambda x: len(str(x).split()))
     # sns.distplot(df.word_count, kde=False, rug=True)
     # plt.show()
 
@@ -299,7 +383,8 @@ class Model():
     plt.imshow(wcloud)
     plt.axis('off')
     plt.show()
-
+    
+    """
 
     # pd.set_option("display.max_rows", None, "display.max_columns", None)
     print(df.count(axis=0))
@@ -315,7 +400,7 @@ class Model():
 
     start_time = datetime.now()
 
-    tfidf_ngrams = TfidfVectorizer(min_df=10)
+    tfidf_ngrams = TfidfVectorizer(min_df=5)
     ling_stats = LinguisticVectorizer()
 
     all_features = FeatureUnion([('ling', ling_stats), ('tfidf', tfidf_ngrams)])
@@ -325,34 +410,36 @@ class Model():
     pipeline = Pipeline([('all', all_features), ('clf', clf)])
 
     param_grid = {
-        'all__tfidf__max_features' : [25, 30],
-        'all__tfidf__ngram_range': [(1,2),(1.3)],
-        'clf__alpha': [0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]}
+        'all__tfidf__ngram_range': [(1,3)],
+        'clf__alpha': [1, 5]}
 
     grid = GridSearchCV(pipeline
                         , param_grid
                         , n_jobs=-1
-                        , cv=2
-                        , return_train_score=True
-                        , verbose=3)
+                        , cv=3
+                        , scoring='accuracy'
+                        , verbose=10)
 
     for param in grid.get_params().keys():
         print(param)
 
     grid.fit(text_train, y_train)
 
-    results = pd.DataFrame.from_dict(grid.cv_results_)  # converting the results in to a dataframe
-    results = results.sort_values(['param_alpha'])
-    results.head()
-
-    bestparam = grid.best_params_['alpha']  # extracting the best hyperparameter
-    print("The best Alpha=", bestparam)
-    bestparam = grid.best_params_['ngram_range']  # extracting the best hyperparameter
-    print("The best ngram_range=", bestparam)
-    bestparam = grid.best_params_['max_features']  # extracting the best hyperparameter
-    print("The best max_features=", bestparam)
-
     print("best cross-validation score: {:.2f}".format(grid.best_score_))
+
+    # precision, recall, thresholds = precision_recall_curve(y_test, grid.predict(text_test))
+    #
+    # plot_precision_recall_vs_threshold(precision, recall, thresholds)
+    # plt.show()
+    #
+    # bestparam = grid.best_params_['alpha']  # extracting the best hyperparameter
+    # print("The best Alpha=", bestparam)
+    # bestparam = grid.best_params_['ngram_range']  # extracting the best hyperparameter
+    # print("The best ngram_range=", bestparam)
+    # bestparam = grid.best_params_['max_features']  # extracting the best hyperparameter
+    # print("The best max_features=", bestparam)
+
+
 
     # x_test = pd.DataFrame({"tweet": ['I love trump']})
     # x_test['tweets'] = pre_processing(x_test)
