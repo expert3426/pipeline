@@ -16,7 +16,7 @@ import numpy as np
 # Data Preprocessing and Feature Engineering
 import csv, collections
 import re
-
+from nltk.corpus import wordnet
 from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
@@ -45,6 +45,8 @@ from sklearn.metrics import precision_recall_curve
 
 # 알파벳이 아닌 문자
 non_alphabet = re.compile('[^a-z]+')
+# 두 글자가 중복되는 문자
+dupl_wd = re.compile(r'([a-z])\1{1,}')
 
 emo_info = {
     # positive emoticons
@@ -83,7 +85,6 @@ def emo_repl(phrase):
     for k in emo_info_order:
         phrase = phrase.replace(k, emo_info[k])
     return phrase
-
 
 def decontracted(phrase):
     # specific
@@ -144,7 +145,10 @@ def pre_processing(datframe):
     df['tweet'] = df['tweet'].apply(emo_repl)
     print(df.head())
 
-    # 발음 수축된 단어 두 단어로 다시 표기
+    #"-" 또는 "_"로 묶여 있는 단어 분리(예시: never-ending => never ending)
+    df["tweet"] = df["tweet"].str.replace(r'[\-\_]', ' ')
+
+    # 발음 수축된 단어 두 단어로 다시 표기(예시: i'm => i am
     df['tweet'] = df['tweet'].apply(decontracted)
     print(df.head())
 
@@ -168,7 +172,6 @@ def pre_processing(datframe):
     stop.extend(manual_sw_list)
 
     # print(stop)
-
     df['tweet'] = df['tweet'].apply(lambda x: ' '.join([word for word in x.split() if word not in (stop)]))
     print(df.head())
 
@@ -177,7 +180,7 @@ def pre_processing(datframe):
     df['tweet'] = df['tweet'].apply(lambda x: ' '.join([lem.lemmatize(word, 'v') for word in x.split()]))
     print(df.head())
 
-    # 구두점 제거 Normalization
+    # 구두점 제거
     df["tweet"] = df["tweet"].str.replace(r'[^\w\s]', '')
     print(df.head())
 
@@ -185,20 +188,25 @@ def pre_processing(datframe):
     df["tweet"] = df["tweet"].str.replace(r'[0-9]+', '')
     print(df.head())
 
-    # 두 글자 이상 중복된 경우 알파벳 모두 두 글자로 만드는 작업
-    df['tweet'] = df['tweet'].str.replace(r'([a-z])\1{1,}', r'\1\1')
-
     print(df.head())
     # 인코딩으로 인한 깨진 문자 제거
-    df['tweet'] = df['tweet'].apply(
-        lambda x: ' '.join([word for word in x.split() if non_alphabet.search(word) is None]))
+    df['tweet'] = df['tweet'].apply(lambda x: ' '.join([word for word in x.split() if non_alphabet.search(word) is None]))
     print(df.head())
 
     # haha 여러번 중복 되는 것 두글자로 변경
     df['tweet'] = df['tweet'].str.replace(r'(ha)\1{1,}', r'\1')
     print(df.head())
 
-    #
+    # 두 글자 이상 중복된 경우 알파벳 모두 두 글자로 만드는 작업(예시: woooow -> woow
+    df['tweet'] = df['tweet'].str.replace(r'([a-z])\1{1,}', r'\1\1')
+
+    #두 글자 이상 중복되는 알파벳일 경우, 영어사전에 없는 단어는 한 글자로 줄이기(예시: woow, 사전에 존재 하지 않음 wow로 변경
+    df['tweet'] = df['tweet'].apply(lambda x: ' '.join([word if len(wordnet.synsets(word)) > 0 else re.sub(r'([a-z])\1{1,}', r'\1', word) for word in x.split()]))
+
+    # 정규표현식으로 인해 공백이 된 데이터 제거
+    df.drop(df[df["tweet"] == ''].index, inplace=True)
+    df = df.reset_index(drop=True)
+
     # #문자가 없는 경우 제거
     # df['rm_empty'] = df['unique_haha'].apply(lambda x: ' '.join([word for word in x.split() if len(word) > 0]))
     # print(df.head())
@@ -251,14 +259,6 @@ sent_word_net = load_sent_word_net()
 
 # 사전 예시
 # print(sent_word_net['v/fantasize'])
-
-def plot_precision_recall_vs_threshold(precisions, recalls, thresholds):
-    plt.plot(thresholds, precisions[:-1], "b--", label="Precision")
-    plt.plot(thresholds, recalls[:-1], "g-", label="Recall")
-    plt.xlabel("Threshold")
-    plt.legend(loc="center left")
-    plt.ylim([0, 1])
-
 
 class LinguisticVectorizer(BaseEstimator):
     """POS 품사를 고려한 긍정 부정 단어 점수 사전 """
@@ -348,7 +348,6 @@ class LinguisticVectorizer(BaseEstimator):
 
         return result
 
-
 class Model():
     # 트위터 training data 불러오기
     df = pd.read_csv('training.1600000.processed.noemoticon.csv', encoding='latin', header=None,
@@ -357,18 +356,13 @@ class Model():
     # 불필요한 컬렁 삭제
     df = df.drop(["ids", "date", "flag", "user"], axis=1)
 
-    # 긍정,부정 결과만 다루기 때문에 4를 1로 변경.
+    # 긍정,부정 결과만 다루기 때문에 4를 1로 변경.(설명변수)
     df['target'] = df['target'].replace(4, 1)
 
-    # 트위터 문자 데이터 전처리 완료 후 데이터프레임
+    # 트위터 문자 데이터 전처리 완료 후 데이터프레임(독립변수)
     df['tweets'] = pre_processing(df)
 
-    # 정규표현식으로 인해 공백이 된 데이터 제거
-    df.drop(df[df["tweets"] == ''].index, inplace=True)
-    df = df.reset_index(drop=True)
     """
-    amx_feature 25 또는 30개 까지
-    #트위터에 제한이 글자수 제한된 용량 만큼 쓰는 사람은 드물 것이다. 파라미터로 max_feature 설정하기
     df["word_count"] = df['tweet'].apply(lambda x: len(str(x).split()))
     sns.distplot(df.word_count, kde=False, rug=True)
     plt.show()
@@ -396,15 +390,13 @@ class Model():
     plt.imshow(wcloud)
     plt.axis('off')
     plt.show()
-
     """
 
     # pd.set_option("display.max_rows", None, "display.max_columns", None)
     print(df.count(axis=0))
 
     # 데이터 셔플
-    text_train, text_test, y_train, y_test = train_test_split(df['tweets'], df['target'], random_state=0,
-                                                              test_size=0.20)
+    text_train, text_test, y_train, y_test = train_test_split(df['tweets'], df['target'], random_state=0, test_size=0.20)
 
     print(len(text_train))
     print(len(text_test))
@@ -415,21 +407,19 @@ class Model():
 
     tfidf_ngrams = TfidfVectorizer(min_df=5)
     ling_stats = LinguisticVectorizer()
-
     all_features = FeatureUnion([('ling', ling_stats), ('tfidf', tfidf_ngrams)])
-
     clf = MultinomialNB()
 
     pipeline = Pipeline([('all', all_features), ('clf', clf)])
 
     param_grid = {
         'all__tfidf__ngram_range': [(1, 3)],
-        'clf__alpha': [0.5, 1, 5]}
+        'clf__alpha': [0.5, 1, 5, 10]}
 
     grid = GridSearchCV(pipeline
                         , param_grid
                         , n_jobs=-1
-                        , cv=2
+                        , cv=3
                         , scoring='roc_auc'
                         , return_train_score=True
                         , verbose=10)
@@ -440,8 +430,8 @@ class Model():
     grid.fit(text_train, y_train)
 
     results = pd.DataFrame.from_dict(grid.cv_results_)  # converting the results in to a dataframe
-    results = results.sort_values(['param_alpha'])
-    results.head()
+    results = results.sort_values(['clf__alpha'])
+    print(np.transpose(results))
 
     train_auc = results['mean_train_score'].values  # extracting the auc scores
     cv_auc = results['mean_test_score'].values
@@ -449,7 +439,7 @@ class Model():
     bestparam = clf.best_params_['clf__alpha']  # extracting the best hyperparameter
     print("The best Alpha=", bestparam)
 
-    print("best cross-validation score: {:.2f}".format(grid.best_score_))
+    # print("best cross-validation score: {:.2f}".format(grid.best_score_))
 
     # precision, recall, thresholds = precision_recall_curve(y_test, grid.predict(text_test))
     #
