@@ -93,8 +93,10 @@ def decontracted(phrase):
     phrase = re.sub(r"\bdon't\b", "do not", phrase)
     phrase = re.sub(r"\bdoesn't\b", "does not", phrase)
     phrase = re.sub(r"\bdidn't\b", "did not", phrase)
+    phrase = re.sub(r"\bdidnt\b", "did not", phrase)
     phrase = re.sub(r"\bhasn't\b", "has not", phrase)
     phrase = re.sub(r"\bhaven't\b", "have not", phrase)
+    phrase = re.sub(r"\bhavent\b", "have not", phrase)
     phrase = re.sub(r"\bhadn't\b", "had not", phrase)
     phrase = re.sub(r"\bwon't\b", "will not", phrase)
     phrase = re.sub(r"\bwouldn't\b", "would not", phrase)
@@ -134,8 +136,8 @@ def pre_processing(datframe):
     df["tweet"] = df["tweet"].str.replace(r'[\@\#]\S+', '')
     print(df.head())
 
-    # HTML 제거
-    df["tweet"] = df["tweet"].str.replace(r'<\w+[^>]+>', '')
+    # HTML 관련 문자 제거
+    df["tweet"] = df["tweet"].str.replace(r'<\w+[^>]+>|[\&]\w+[\;]', '')
     print(df.head())
 
     # 마침표 제거
@@ -156,8 +158,7 @@ def pre_processing(datframe):
     # 트위터 글 공백 구분자로 자른 후 불용어는 제거 후 리스트
     stop = stopwords.words('english')
     # 불용어 추가
-    manual_sw_list = ['retweet', 'retwet', 'rt', 'oh', 'dm', 'mt', 'ht', 'ff', 'facebook', 'instagram', 'twitter',
-                      'shoulda', \
+    manual_sw_list = ['retweet', 'retwet', 'rt', 'oh', 'dm', 'mt', 'ht', 'ff', 'shoulda' \
                       'woulda', 'coulda', 'might', 'im', 'tb', 'mysql', 'hah', "a", "an", "the", "and", "but", "if",
                       "or", "because", \
                       "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into",
@@ -167,7 +168,7 @@ def pre_processing(datframe):
                       "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both",
                       "each", "few", "more", \
                       "most", "other", "some", "such", "nor", "only", "own", "same", "so", "than", "too", "very", "s",
-                      "t", "just", "don", "now", 'tweet']
+                      "t", "just", "don", "now", 'tweet', 'x', 'f','']
 
     stop.extend(manual_sw_list)
 
@@ -199,13 +200,11 @@ def pre_processing(datframe):
 
     # 두 글자 이상 중복된 경우 알파벳 모두 두 글자로 만드는 작업(예시: woooow -> woow
     df['tweet'] = df['tweet'].str.replace(r'([a-z])\1{1,}', r'\1\1')
+    print(df.head())
 
     #두 글자 이상 중복되는 알파벳일 경우, 영어사전에 없는 단어는 한 글자로 줄이기(예시: woow, 사전에 존재 하지 않음 wow로 변경
     df['tweet'] = df['tweet'].apply(lambda x: ' '.join([word if len(wordnet.synsets(word)) > 0 else re.sub(r'([a-z])\1{1,}', r'\1', word) for word in x.split()]))
-
-    # 정규표현식으로 인해 공백이 된 데이터 제거
-    df.drop(df[df["tweet"] == ''].index, inplace=True)
-    df = df.reset_index(drop=True)
+    print(df.head())
 
     # #문자가 없는 경우 제거
     # df['rm_empty'] = df['unique_haha'].apply(lambda x: ' '.join([word for word in x.split() if len(word) > 0]))
@@ -271,6 +270,7 @@ class LinguisticVectorizer(BaseEstimator):
         return self
 
     def _get_sentiments(self, d):
+        # print(d)
         sent = tuple(d.split())
         tagged = nltk.pos_tag(sent)
         # pos_tag와 SentiWordNet과 단어의 품사가 일치하지 않으면 긍정, 부정 점수는 모두 0
@@ -361,6 +361,10 @@ class Model():
 
     # 트위터 문자 데이터 전처리 완료 후 데이터프레임(독립변수)
     df['tweets'] = pre_processing(df)
+
+    # 정규표현식으로 인해 공백이 된 데이터 제거
+    df.drop(df[df["tweets"] == ''].index, inplace=True)
+    df = df.reset_index(drop=True)
 
     """
     df["word_count"] = df['tweet'].apply(lambda x: len(str(x).split()))
