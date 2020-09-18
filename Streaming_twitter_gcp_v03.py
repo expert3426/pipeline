@@ -350,6 +350,7 @@ class LinguisticVectorizer(BaseEstimator):
         return result
 
 class Model():
+
     # 트위터 training data 불러오기
     df = pd.read_csv('training.1600000.processed.noemoticon.csv', encoding='latin', header=None,
                      names=['target', 'ids', 'date', 'flag', 'user', 'tweet'])
@@ -419,8 +420,7 @@ class Model():
     df_test = df_test.reset_index(drop=True)
 
     text_test = df_test['tweets']
-    print(text_test)
-    df_test = df_test['target']
+    y_test = df_test['target']
 
     start_time = datetime.now()
 
@@ -434,8 +434,6 @@ class Model():
     pipeline = Pipeline([('all', all_features), ('clf', clf)])
 
     pipeline.fit(text_train, y_train)
-
-
 
     y_train_pred = pipeline.predict_proba(text_train)[:, 1]  # Prediction using the model(log probability of each class)
     y_validation_pred = pipeline.predict_proba(text_validation)[:, 1]
