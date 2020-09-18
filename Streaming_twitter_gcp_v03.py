@@ -402,28 +402,15 @@ class Model():
 
     # 데이터 셔플
     # 분석용, 검증 데이터 분리
-    text_train, text_validation, y_train, y_validation = train_test_split(df['tweets'], df['target'], random_state=0,
-                                                                          test_size=0.20)
+    text_train, text_validation, y_train, y_validation = train_test_split(df['tweets'], df['target'], random_state=0, test_size=0.20)
 
     print(len(text_train))
     print(len(text_validation))
     print(len(y_train))
     print(len(y_validation))
 
-    start_time = datetime.now()
-    # Modelling
-
-    tfidf_ngrams = TfidfVectorizer(min_df=5, ngram_range=(1, 3))
-    ling_stats = LinguisticVectorizer()
-    all_features = FeatureUnion([('ling', ling_stats), ('tfidf', tfidf_ngrams)])
-    clf = MultinomialNB(alpha=1)
-
-    pipeline = Pipeline([('all', all_features), ('clf', clf)])
-
-    pipeline.fit(text_train, y_train)
-
     # 테스트 데이터로 모델 평가
-    df_test = pd.read_csv('trump_labeled_final.csv', header=None, names=['text', 'target'])
+    df_test = pd.read_csv('trump_labeled_final.csv', header=None, names=['tweet', 'target'])
 
     # 트위터 문자 데이터 전처리 완료 후 데이터프레임(독립변수)
     df_test['tweets'] = pre_processing(df_test)
@@ -431,7 +418,24 @@ class Model():
     df_test.drop(df_test[df_test["tweets"] == ''].index, inplace=True)
     df_test = df_test.reset_index(drop=True)
 
-    text_test, _, y_test, _ = train_test_split(df_test['tweets'], df_test['target'], random_state=0, test_size=0)
+    text_test = df_test['tweets']
+    print(text_test)
+    df_test = df_test['target']
+
+    start_time = datetime.now()
+
+    # Modelling
+
+    tfidf_ngrams = TfidfVectorizer(min_df=5, ngram_range=(1, 3))
+    ling_stats = LinguisticVectorizer()
+    all_features = FeatureUnion([('ling', ling_stats), ('tfidf', tfidf_ngrams)])
+    clf = MultinomialNB(alpha=5)
+
+    pipeline = Pipeline([('all', all_features), ('clf', clf)])
+
+    pipeline.fit(text_train, y_train)
+
+
 
     y_train_pred = pipeline.predict_proba(text_train)[:, 1]  # Prediction using the model(log probability of each class)
     y_validation_pred = pipeline.predict_proba(text_validation)[:, 1]
@@ -450,6 +454,14 @@ class Model():
     print('thresholds', vald_thresholds)
     print('Test AUC=', teauc)
     print('thresholds', test_thresholds)
+
+    plt.plot(train_fpr, train_tpr, label="train AUC =" + str(auc(train_fpr, train_tpr)))
+    plt.plot(vald_fpr, vald_tpr, label="validation AUC =" + str(auc(vald_fpr, vald_tpr)))
+    plt.plot(test_fpr, test_tpr, label="test AUC =" + str(auc(test_fpr, test_tpr)))
+    plt.legend()
+    plt.title("AUC PLOTS")  # Plotting train and test AUC
+    plt.grid()
+    plt.show()
 
     """
     그래프 그리기
