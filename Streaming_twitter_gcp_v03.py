@@ -423,9 +423,7 @@ class Model():
     pipeline.fit(text_train, y_train)
 
     # 테스트 데이터로 모델 평가
-    df_test = pd.read_csv('trump_labeled.csv', encoding='latin', header=None,
-                          names=['id', 'datetime', 'text', 'target'])
-    df_test = df.drop(["id", "datetime"], axis=1)
+    df_test = pd.read_csv('trump_labeled_final.csv', header=None, names=['text', 'target'])
 
     # 트위터 문자 데이터 전처리 완료 후 데이터프레임(독립변수)
     df_test['tweets'] = pre_processing(df_test)
